@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa de Escolas</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
+<style>
+  :root{ --bg:#0f172a; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#38bdf8; }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  #map{position:absolute;inset:0;}
+  #panel{
+    position:absolute; top:12px; left:12px; z-index:1000;
+    background:var(--panel); color:var(--text); border-radius:12px;
+    padding:14px 16px; width:260px; max-width:80vw;
+    box-shadow:0 6px 20px rgba(0,0,0,.35); font-size:14px;
+  }
+  #panel h1{font-size:16px;margin:0 0 8px;}
+  #search{width:100%;padding:8px 10px;border-radius:8px;border:1px solid #374151;background:#1f2937;color:var(--text);margin-bottom:10px;}
+  .type-row{display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer;}
+  .swatch{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+  .count{margin-left:auto;color:var(--muted);font-size:12px;}
+  #stats{color:var(--muted);font-size:12px;margin-top:10px;border-top:1px solid #374151;padding-top:8px;}
+  .leaflet-popup-content b{display:block;margin-bottom:3px;}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <h1>🏫 Escolas</h1>
+  <input id="search" type="text" placeholder="Buscar por nome...">
+  <div id="types"></div>
+  <div id="stats"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+<script src="schools_data.js"></script>
+<script>
+const COLORS = {
+  "Escola Municipal":"#38bdf8", "Escola Estadual":"#f97316", "Escola Particular":"#a78bfa",
+  "Escola Federal":"#f43f5e", "CEMEI":"#34d399", "CEI":"#facc15", "Anexo":"#94a3b8",
+  "FUNEC":"#fb7185", "Educarte":"#4ade80", "Espaço Educativo":"#60a5fa"
+};
+const types = [...new Set(SCHOOLS.map(s=>s.tipo))].sort();
+
+const map = L.map('map', {preferCanvas:true}).setView([-19.90, -44.05], 11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'&copy; OpenStreetMap contributors', maxZoom:19
+}).addTo(map);
+
+const clusterByType = {};
+const markersByType = {};
+types.forEach(t=>{
+  clusterByType[t] = L.markerClusterGroup({disableClusteringAtZoom:16});
+  markersByType[t] = [];
+});
+
+SCHOOLS.forEach(s=>{
+  const color = COLORS[s.tipo] || "#38bdf8";
+  const marker = L.circleMarker([s.lat, s.lon], {
+    radius:7, color:"#0f172a", weight:1, fillColor:color, fillOpacity:0.9
+  }).bindPopup(`<b>${s.name}</b>${s.tipo}`);
+  marker._name = s.name.toLowerCase();
+  markersByType[s.tipo].push(marker);
+  clusterByType[s.tipo].addLayer(marker);
+  clusterByType[s.tipo].addTo(map);
+});
+
+const typesDiv = document.getElementById('types');
+types.forEach(t=>{
+  const row = document.createElement('div');
+  row.className = 'type-row';
+  row.innerHTML = `<input type="checkbox" checked data-type="${t}">
+    <span class="swatch" style="background:${COLORS[t]||'#38bdf8'}"></span>
+    <span>${t}</span><span class="count">${markersByType[t].length}</span>`;
+  typesDiv.appendChild(row);
+});
+typesDiv.addEventListener('change', e=>{
+  const t = e.target.getAttribute('data-type');
+  if(!t) return;
+  if(e.target.checked) clusterByType[t].addTo(map);
+  else map.removeLayer(clusterByType[t]);
+});
+
+document.getElementById('stats').textContent = `${SCHOOLS.length} escolas ao todo`;
+
+document.getElementById('search').addEventListener('input', e=>{
+  const q = e.target.value.trim().toLowerCase();
+  types.forEach(t=>{
+    clusterByType[t].clearLayers();
+    markersByType[t].forEach(m=>{
+      if(!q || m._name.includes(q)) clusterByType[t].addLayer(m);
+    });
+  });
+  if(q){
+    const match = SCHOOLS.filter(s=>s.name.toLowerCase().includes(q));
+    if(match.length===1) map.setView([match[0].lat, match[0].lon], 16);
+  }
+});
+</script>
+</body>
+</html>
